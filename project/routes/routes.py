@@ -171,8 +171,6 @@ def test_order():
             n_client.close_connection()
             print("Client N session closed.")
             
-        
-
         try:
             f_order = f_client.create_test_order(**params)
             last_buy = LastBuys.query.filter_by(symbol=data['symbol'][:-4]).first()
@@ -216,13 +214,13 @@ def test_order():
         db.session.commit() 
         return jsonify(response)    
 
-
-
     elif data['side'] == 'SELL':
-        asset = data['symbol'][:-4]
-        asset_amount = int(float(client.get_asset_balance(asset)['free']))
 
-        asset_actual_market_price = client.get_symbol_ticker(symbol=data['symbol'])['price']
+        asset = data['symbol'][:-4]
+        f_asset_amount = int(float(f_client.get_asset_balance(asset)['free']))
+        n_asset_amount = int(float(n_client.get_asset_balance(asset)['free']))
+
+        asset_actual_market_price = f_client.get_symbol_ticker(symbol=data['symbol'])['price']
         
         last_buy = LastBuys.query.filter_by(symbol=data['symbol'][:-4]).first()
         asset_last_buy_price = last_buy.price
@@ -236,38 +234,85 @@ def test_order():
         if last_buy.last_operation == "S":
             return jsonify({"message": "No se permite vender, la ultima operacion con esta moneda fue una venta."})
 
+        f_params = {
+            'symbol': data['symbol'],
+            'side': 'SELL',
+            'type': 'MARKET',
+            'quantity': f_asset_amount,
+            #'timeInforce': 'IOC',
+            #'price': data['price'],
+            }        
+        n_params = {
+            'symbol': data['symbol'],
+            'side': 'SELL',
+            'type': 'MARKET',
+            'quantity': n_asset_amount,
+            #'timeInforce': 'IOC',
+            #'price': data['price'],
+            }
+        
+        response = dict()
         try:
-            params = {
-                'symbol': data['symbol'],
-                'side': 'SELL',
-                'type': 'MARKET',
-                'quantity': asset_amount,
-                #'timeInforce': 'IOC',
-                #'price': data['price'],
-                }
-            order = client.create_test_order(**params)
+            order = f_client.create_test_order(**f_params)
+            
+            sell = Sells(
+                symbol=data['symbol'][:-4],
+                price=order['price'], # o de donde sea que se saque
+                quantity=f_asset_amount,
+                # user = user (cuando implementemos doble usuario)
+                )
+            db.session.add(sell)
+
+            last_buy.last_operation = "S"
+            db.session.add(last_buy)
+
+            db.session.commit()
+
         except Exception as e: 
-            return jsonify({
+            response["F_error"] = {
                 "error": str(e),
                 "order_params": data,
                 "asset_actual_market_price": asset_actual_market_price,
                 "asset_last_buy_price": asset_last_buy_price,
-                "asset_amount": asset_amount
-            })
+                "asset_amount": f_asset_amount
+            }
+        finally:
+            f_client.close_connection()
+            print("Client F session closed.")
+
         
-        sell = Sells(
-            symbol=data['symbol'][:-4],
-            price=order['price'], # o de donde sea que se saque
-            quantity=quantity,
-            # user = user (cuando implementemos doble usuario)
-        )
-        db.session.add(sell)
+        try:
+            order = n_client.create_test_order(**n_params)
+            
+            sell = Sells(
+                symbol=data['symbol'][:-4],
+                price=order['price'], # o de donde sea que se saque
+                quantity=n_asset_amount,
+                # user = user (cuando implementemos doble usuario)
+                )
+            db.session.add(sell)
 
-        last_buy.last_operation = "S"
-        db.session.add(last_buy)
+            last_buy.last_operation = "S"
+            db.session.add(last_buy)
 
-        db.session.commit()
-        return jsonify({"order": order})
+            db.session.commit()
+
+        except Exception as e: 
+            response["N_error"] = {
+                "error": str(e),
+                "order_params": data,
+                "asset_actual_market_price": asset_actual_market_price,
+                "asset_last_buy_price": asset_last_buy_price,
+                "asset_amount": n_asset_amount
+            }
+        finally:
+            n_client.close_connection()
+            print("Client N session closed.")
+        
+        db.session.commit() 
+        return jsonify(response)    
+
+    
     else:
         return jsonify({"error": "Side can only be BUY/SELL"})
 
