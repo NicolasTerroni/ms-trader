@@ -3,9 +3,7 @@ from project.models.init_db import db
 from project.routes import trader_api
 from decouple import config, UndefinedValueError
 
-NICO_DB_LOCATION = config('NICO_DB_LOCATION') 
-FRAN_DB_LOCATION = config('FRAN_DB_LOCATION') 
-
+DB_LOCATION = config('DB_LOCATION') 
 
 # App setup and config
 def create_app(db_location):
@@ -20,9 +18,6 @@ def create_app(db_location):
     return app
 
 if __name__ == "__main__":
-    try:
-        app = create_app(db_location=FRAN_DB_LOCATION)
-    except:
-        app = create_app(db_location=NICO_DB_LOCATION)
+    app = create_app(db_location=DB_LOCATION)
     app.run(debug=True)
 

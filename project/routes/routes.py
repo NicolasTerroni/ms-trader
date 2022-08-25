@@ -5,7 +5,7 @@ from flask.json import jsonify
 import os, json
 
 from project.models.init_db import db
-from project.models.models import Buys, LastBuys, Sells
+from project.models.models import Buys, LastOperation, Sells
 
 from binance.client import Client
 from binance.enums import *
@@ -97,8 +97,6 @@ def test_order():
                 quantity = float(round(quantity,round_to))
         else:
             quantity = float(symbol_info["filters"][2]["minQty"])
-
-        #import ipdb; ipdb.set_trace()
         
         # LOT_SIZE
         min_quantity_allowed = float(symbol_info["filters"][2]["minQty"])
@@ -114,11 +112,6 @@ def test_order():
             return jsonify({"error": "La cantidad es menor a la minima permitida del activo",
                 "filterType": symbol_info["filters"][5]["filterType"],
                 })
-        
-        # incrementador de cantidad hasta alcanzar el minimo permitido
-        #step_size_quantity = float(symbol_info['filters'][5]['stepSize'])
-        #while quantity < min_quantity_allowed:
-        #    min_quantity_allowed += step_size_quantity
 
         params = {
             'symbol': data['symbol'],
@@ -127,34 +120,37 @@ def test_order():
             'quantity': float(quantity),
         }
 
-        #import ipdb; ipdb.set_trace()
-
         response = dict() 
         
+
+
         # N BUY
-        n_last_buy = LastBuys.query.filter_by(symbol=data['symbol'][:-4], user="N").first()
-        if n_last_buy.last_operation == "B":
+        n_last_operation = LastOperation.query.filter_by(symbol=data['symbol'][:-4], user="N").first()
+        if not n_last_operation:
+            n_last_operation = LastOperation(
+                symbol=data['symbol'][:-4],
+                user = "N"
+            )
+            db.session.add(n_last_operation)
+            db.session.commit()
+
+        if n_last_operation.last_operation == "B":
             response["N_error"] = {"error": "No se permite comprar, la ultima operacion con esta moneda fue una compra."}
         else:
             try:
                 n_order = n_client.create_test_order(**params)
 
-                last_buy = LastBuys.query.filter_by(symbol=data['symbol'][:-4]).first()
-                if not last_buy:
-                    last_buy = LastBuys(
-                        symbol=data['symbol'][:-4],
-                        price=n_order['price'], 
-                        quantity=quantity,
-                        last_operation = "B"
-                        user = "N"
-                    )
-                    db.session.add(last_buy)
-                else:
-                    last_buy.symbol = data['symbol'][:-4]
-                    last_buy.price = n_order['price'] 
-                    last_buy.quantity = quantity
-                    last_buy.last_operation = "B"
-                    db.session.add(last_buy)
+
+                # SOLO PARA TESTING
+                if len(n_order) == 0:
+                    n_order['price'] = 1
+
+
+
+                n_last_operation.price = n_order['price'] 
+                n_last_operation.quantity = quantity
+                n_last_operation.last_operation = "B"
+                db.session.add(n_last_operation)
                 
                 buy = Buys(
                     symbol= data['symbol'][:-4],
@@ -177,29 +173,35 @@ def test_order():
                 n_client.close_connection()
                 print("Client N session closed.")
         
+
+
         # F BUY
-        f_last_buy = LastBuys.query.filter_by(symbol=data['symbol'][:-4], user="F").first()
-        if f_last_buy.last_operation == "B":
+        f_last_operation = LastOperation.query.filter_by(symbol=data['symbol'][:-4], user="F").first()
+        if not f_last_operation:
+            f_last_operation = LastOperation(
+                symbol=data['symbol'][:-4],
+                user = "F"
+            )
+            db.session.add(f_last_operation)
+            db.session.commit()
+
+        if f_last_operation.last_operation == "B":
             response["F_error"] = {"error": "No se permite comprar, la ultima operacion con esta moneda fue una compra."}
         else:
             try:
                 f_order = f_client.create_test_order(**params)
-                last_buy = LastBuys.query.filter_by(symbol=data['symbol'][:-4]).first()
-                if not last_buy:
-                    last_buy = LastBuys(
-                        symbol=data['symbol'][:-4],
-                        price=f_order['price'], 
-                        quantity=quantity,
-                        last_operation = "B"
-                        user = "F"
-                    )
-                    db.session.add(last_buy)
-                else:
-                    last_buy.symbol = data['symbol'][:-4]
-                    last_buy.price = f_order['price'] 
-                    last_buy.quantity = quantity
-                    last_buy.last_operation = "B"
-                    db.session.add(last_buy)
+
+
+                # SOLO PARA TESTING
+                if len(f_order) == 0:
+                    f_order['price'] = 1
+
+
+
+                f_last_operation.price = f_order['price'] 
+                f_last_operation.quantity = quantity
+                f_last_operation.last_operation = "B"
+                db.session.add(f_last_operation)
                 
                 buy = Buys(
                     symbol= data['symbol'][:-4],
@@ -226,109 +228,154 @@ def test_order():
         db.session.commit() 
         return jsonify(response)    
 
+
     elif data['side'] == 'SELL':
 
         asset = data['symbol'][:-4]
-        f_asset_amount = int(float(f_client.get_asset_balance(asset)['free']))
-        n_asset_amount = int(float(n_client.get_asset_balance(asset)['free']))
-
         asset_actual_market_price = f_client.get_symbol_ticker(symbol=data['symbol'])['price']
         
-        last_buy = LastBuys.query.filter_by(symbol=data['symbol'][:-4]).first()
-        asset_last_buy_price = last_buy.price
-
-        if not asset_last_buy_price:
-            asset_last_buy_price = 0
-        
-        if float(asset_last_buy_price) > float(asset_actual_market_price):
-            return jsonify({"message": "Se esta intentando vender a menos de lo que se gasto al comprar"})
-        
-        f_params = {
-            'symbol': data['symbol'],
-            'side': 'SELL',
-            'type': 'MARKET',
-            'quantity': f_asset_amount,
-            #'timeInforce': 'IOC',
-            #'price': data['price'],
-            }        
-        n_params = {
-            'symbol': data['symbol'],
-            'side': 'SELL',
-            'type': 'MARKET',
-            'quantity': n_asset_amount,
-            #'timeInforce': 'IOC',
-            #'price': data['price'],
-            }
-        
         response = dict()
+        
 
-
-        # F SELL
-        f_last_buy = LastBuys.query.filter_by(symbol=data['symbol'][:-4], user="F").first()
-        if f_last_buy.last_operation == "S":
-            response["F_error"] = {"error": "No se permite vender, la ultima operacion con esta moneda fue una venta."}
-        else:
-            try:
-                order = f_client.create_test_order(**f_params)
-                
-                f_sell = Sells(
-                    symbol=data['symbol'][:-4],
-                    price=order['price'], # o de donde sea que se saque
-                    quantity=f_asset_amount,
-                    user = "F"
-                    )
-                db.session.add(f_sell)
-
-                f_last_buy.last_operation = "S"
-                db.session.add(f_last_buy)
-
-                db.session.commit()
-
-            except Exception as e: 
-                response["F_error"] = {
-                    "error": str(e),
-                    "order_params": data,
-                    "asset_actual_market_price": asset_actual_market_price,
-                    "asset_last_buy_price": asset_last_buy_price,
-                    "asset_amount": f_asset_amount
-                }
-            finally:
-                f_client.close_connection()
-                print("Client F session closed.")
 
         # N SELL
-        n_last_buy = LastBuys.query.filter_by(symbol=data['symbol'][:-4], user="N").first()
-        if n_last_buy.last_operation == "S":
-            response["F_error"] = {"error": "No se permite vender, la ultima operacion con esta moneda fue una venta."}
+        n_last_operation = LastOperation.query.filter_by(symbol=data['symbol'][:-4], user="N").first()
+        if n_last_operation.last_operation == "S":
+            response["N_error"] = {"error": "No se permite vender, la ultima operacion con esta moneda fue una venta."}
         else:
+            n_asset_amount = int(float(n_client.get_asset_balance(asset)['free']))
+            n_last_buy_price = n_last_operation.price
+
+            if float(n_last_buy_price) > float(asset_actual_market_price):
+                response["N_error"] = {"error": "Se esta intentando vender a menos de lo que se gasto al comprar"}
+
+            
+            
+            # SOLO PARA TESTING
+            if n_asset_amount == 0:
+                n_asset_amount = 10
+
+
+
+
+            n_params = {
+                'symbol': data['symbol'],
+                'side': 'SELL',
+                'type': 'MARKET',
+                'quantity': n_asset_amount,
+                #'timeInforce': 'IOC',
+                #'price': data['price'],
+                }
+        
             try:
-                order = n_client.create_test_order(**n_params)
+                n_order = n_client.create_test_order(**n_params)
                 
+
+
+                # SOLO PARA TESTING
+                if len(n_order) == 0:
+                    n_order['price'] = 10
+
+
+
                 n_sell = Sells(
                     symbol=data['symbol'][:-4],
-                    price=order['price'], # o de donde sea que se saque
+                    price=n_order['price'],
                     quantity=n_asset_amount,
                     user = "N"
                     )
                 db.session.add(n_sell)
 
-                n_last_buy.last_operation = "S"
-                db.session.add(n_last_buy)
+                n_last_operation.last_operation = "S"
+                n_last_operation.price = n_order['price']
+                n_last_operation.quantity = n_asset_amount
+                db.session.add(n_last_operation)
 
                 db.session.commit()
+                
+                response['N_order'] = n_order
 
             except Exception as e: 
                 response["N_error"] = {
                     "error": str(e),
                     "order_params": data,
                     "asset_actual_market_price": asset_actual_market_price,
-                    "asset_last_buy_price": asset_last_buy_price,
+                    "asset_last_buy_price": n_last_buy_price,
                     "asset_amount": n_asset_amount
                 }
             finally:
+                
                 n_client.close_connection()
                 print("Client N session closed.")
         
+
+
+        # F SELL
+        f_last_operation = LastOperation.query.filter_by(symbol=data['symbol'][:-4], user="F").first()
+        if f_last_operation.last_operation == "S":
+            response["F_error"] = {"error": "No se permite vender, la ultima operacion con esta moneda fue una venta."}
+        else:
+            f_asset_amount = int(float(n_client.get_asset_balance(asset)['free']))
+            f_last_buy_price = n_last_operation.price
+
+            if float(f_last_buy_price) > float(asset_actual_market_price):
+                response["F_error"] = {"error": "Se esta intentando vender a menos de lo que se gasto al comprar"}
+
+
+            # SOLO PARA TESTING
+            if f_asset_amount == 0:
+                f_asset_amount = 10
+
+
+            f_params = {
+                'symbol': data['symbol'],
+                'side': 'SELL',
+                'type': 'MARKET',
+                'quantity': f_asset_amount,
+                #'timeInforce': 'IOC',
+                #'price': data['price'],
+                }
+        
+            try:
+                f_order = f_client.create_test_order(**f_params)
+                
+
+
+                # SOLO PARA TESTING
+                if len(f_order) == 0:
+                    f_order['price'] = 10
+
+
+
+                f_sell = Sells(
+                    symbol=data['symbol'][:-4],
+                    price=f_order['price'], 
+                    quantity=f_asset_amount,
+                    user = "F"
+                    )
+                db.session.add(f_sell)
+
+                f_last_operation.last_operation = "S"
+                f_last_operation.price = f_order['price']
+                f_last_operation.quantity = f_asset_amount
+                db.session.add(f_last_operation)
+
+                db.session.commit()
+                response['F_order'] = f_order
+
+
+            except Exception as e: 
+                response["F_error"] = {
+                    "error": str(e),
+                    "order_params": data,
+                    "asset_actual_market_price": asset_actual_market_price,
+                    "asset_last_buy_price": f_last_buy_price,
+                    "asset_amount": f_asset_amount
+                }
+            finally:
+                f_client.close_connection()
+                print("Client F session closed.")
+                
         db.session.commit() 
         return jsonify(response)    
 

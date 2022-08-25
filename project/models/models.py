@@ -5,18 +5,18 @@ from project.models.init_db import db
 
 
 # para guardar las ultimas compras de cada moneda
-class LastBuys(db.Model):
-    __tablename__ = 'last_buys'
+class LastOperation(db.Model):
+    __tablename__ = 'last_operation'
     id = db.Column(Integer, primary_key=True, autoincrement=True)
+    last_operation = db.Column(String)
 
-    symbol = db.Column(String, nullable=False, unique=True)
+    symbol = db.Column(String, nullable=False)
     price = db.Column(Float)
     quantity = db.Column(Float)
 
     date = db.Column(DateTime, server_default=db.func.now())
     user = db.Column(String)
 
-    last_operation = db.Column(String)
 
 # para guardar todas las compras que se hagan
 class Buys(db.Model):
