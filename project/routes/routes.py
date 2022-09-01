@@ -419,17 +419,22 @@ def make_order():
         # LOT_SIZE
         min_quantity_allowed = float(symbol_info["filters"][2]["minQty"])
         if quantity < min_quantity_allowed:
-            return jsonify({
+            error_dict = {
                 "error": "La cantidad es menor a la minima permitida del activo",
                 "filterType": symbol_info["filters"][2]["filterType"],
-                })
+            }
+            print(error_dict)
+            return jsonify(error_dict)
         
         # MARKET_LOT_SIZE
         market_min_quantity_allowed = float(symbol_info['filters'][5]['minQty'])
         if quantity < market_min_quantity_allowed:
-            return jsonify({"error": "La cantidad es menor a la minima permitida del activo",
+            error_dict = {
+                "error": "La cantidad es menor a la minima permitida del activo",
                 "filterType": symbol_info["filters"][5]["filterType"],
-                })
+            }
+            print(error_dict)
+            return jsonify(error_dict)
 
         params = {
             'symbol': data['symbol'],
@@ -530,6 +535,8 @@ def make_order():
                 print("Client F session closed.")
 
         db.session.commit() 
+        
+        print(response)
         return jsonify(response)    
 
 
@@ -608,12 +615,6 @@ def make_order():
             if float(f_last_buy_price) > float(asset_actual_market_price):
                 response["F_error"] = {"error": "Se esta intentando vender a menos de lo que se gasto al comprar"}
 
-
-            # SOLO PARA TESTING
-            if f_asset_amount == 0:
-                f_asset_amount = 10
-
-
             f_params = {
                 'symbol': data['symbol'],
                 'side': 'SELL',
@@ -656,8 +657,12 @@ def make_order():
                 print("Client F session closed.")
                 
         db.session.commit() 
+        
+        print(response)
         return jsonify(response)    
 
     
     else:
-        return jsonify({"error": "Side can only be BUY/SELL"})
+        error_dict = {"error": "Side can only be BUY/SELL"}
+        print(error_dict)
+        return jsonify(error_dict)
