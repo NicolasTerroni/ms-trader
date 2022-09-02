@@ -462,18 +462,27 @@ def make_order():
         else:
             try:
                 n_order = n_client.create_order(**params)
+                
+                # fill up price
+                n_price = 0
+                for fill in n_order['fills']:
+                    fill_price = float(fill['price']) * float(fill['qty'])
+                    n_price += fill_price
 
-                n_last_operation.price = n_order['price'] 
+                    buy = Buys(
+                        symbol = data['symbol'][:-4],
+                        unit_price = float(fill['price']),
+                        quantity = float(fill['qty']),
+                        commission = float(fill['commission']),
+                        user = "N"
+                    )
+
+                n_last_operation.price = n_price 
                 n_last_operation.quantity = quantity
                 n_last_operation.last_operation = "B"
                 db.session.add(n_last_operation)
                 
-                buy = Buys(
-                    symbol= data['symbol'][:-4],
-                    price= n_order['price'],
-                    quantity= quantity,
-                    user = "N"
-                )
+
                 db.session.add(buy)
                 print("N order placed.")
                 response["N_order"] = n_order
@@ -507,17 +516,26 @@ def make_order():
             try:
                 f_order = f_client.create_order(**params)
 
-                f_last_operation.price = f_order['price'] 
+                # fill up price
+                f_price = 0
+                for fill in f_order['fills']:
+                    fill_price = float(fill['price']) * float(fill['qty'])
+                    f_price += fill_price
+
+                    buy = Buys(
+                        symbol = data['symbol'][:-4],
+                        unit_price = float(fill['price']),
+                        quantity = float(fill['qty']),
+                        commission = float(fill['commission']),
+                        user = "F"
+                    )
+
+                f_last_operation.price = f_price 
                 f_last_operation.quantity = quantity
                 f_last_operation.last_operation = "B"
                 db.session.add(f_last_operation)
                 
-                buy = Buys(
-                    symbol= data['symbol'][:-4],
-                    price= f_order['price'], 
-                    quantity= quantity,
-                    user = "F"
-                )
+
                 db.session.add(buy)
                 print("F order placed.")
 
@@ -548,13 +566,12 @@ def make_order():
         response = dict()
         
 
-
         # N SELL
         n_last_operation = LastOperation.query.filter_by(symbol=data['symbol'][:-4], user="N").first()
         if n_last_operation.last_operation == "S":
             response["N_error"] = {"error": "No se permite vender, la ultima operacion con esta moneda fue una venta."}
         else:
-            n_asset_amount = int(float(n_client.get_asset_balance(asset)['free']))
+            n_asset_amount = float(n_client.get_asset_balance(asset)['free'])
             n_last_buy_price = n_last_operation.price
 
             if float(n_last_buy_price) > float(asset_actual_market_price):
@@ -571,17 +588,25 @@ def make_order():
         
             try:
                 n_order = n_client.create_order(**n_params)
-                
-                n_sell = Sells(
-                    symbol=data['symbol'][:-4],
-                    price=n_order['price'],
-                    quantity=n_asset_amount,
-                    user = "N"
-                    )
-                db.session.add(n_sell)
+
+                # fill up price
+                n_price = 0
+                for fill in n_order['fills']:
+                    fill_price = float(fill['price']) * float(fill['qty'])
+                    
+                    n_price += fill_price
+                    
+                    n_sell = Sells(
+                        symbol = data['symbol'][:-4],
+                        unit_price = float(fill['price']),
+                        quantity = float(fill['qty']),
+                        commission = float(fill['commission']),
+                        user = "N"
+                        )
+                    db.session.add(n_sell)
 
                 n_last_operation.last_operation = "S"
-                n_last_operation.price = n_order['price']
+                n_last_operation.price = n_price
                 n_last_operation.quantity = n_asset_amount
                 db.session.add(n_last_operation)
 
@@ -609,8 +634,8 @@ def make_order():
         if f_last_operation.last_operation == "S":
             response["F_error"] = {"error": "No se permite vender, la ultima operacion con esta moneda fue una venta."}
         else:
-            f_asset_amount = int(float(n_client.get_asset_balance(asset)['free']))
-            f_last_buy_price = n_last_operation.price
+            f_asset_amount = float(f_client.get_asset_balance(asset)['free'])
+            f_last_buy_price = f_last_operation.price
 
             if float(f_last_buy_price) > float(asset_actual_market_price):
                 response["F_error"] = {"error": "Se esta intentando vender a menos de lo que se gasto al comprar"}
@@ -624,19 +649,29 @@ def make_order():
                 #'price': data['price'],
                 }
         
+            #import ipdb; ipdb.set_trace()
+            
             try:
                 f_order = f_client.create_order(**f_params)
+
+                # fill up price
+                f_price = 0
+                for fill in f_order['fills']:
+                    fill_price = float(fill['price']) * float(fill['qty'])
+                    f_price += fill_price
+
                 
-                f_sell = Sells(
-                    symbol=data['symbol'][:-4],
-                    price=f_order['price'], 
-                    quantity=f_asset_amount,
-                    user = "F"
-                    )
-                db.session.add(f_sell)
+                    f_sell = Sells(
+                        symbol=data['symbol'][:-4],
+                        unit_price = float(fill['price']),
+                        quantity = float(fill['qty']),
+                        commission = float(fill['commission']),
+                        user = "F"
+                        )
+                    db.session.add(f_sell)
 
                 f_last_operation.last_operation = "S"
-                f_last_operation.price = f_order['price']
+                f_last_operation.price = f_price
                 f_last_operation.quantity = f_asset_amount
                 db.session.add(f_last_operation)
 

@@ -24,11 +24,13 @@ class Buys(db.Model):
     id = db.Column(Integer, primary_key=True, autoincrement=True)
 
     symbol = db.Column(String, nullable=False)
-    price = db.Column(Float)
+    unit_price = db.Column(Float)
     quantity = db.Column(Float)
+    commission = db.Column(Float)
 
     date = db.Column(DateTime, server_default=db.func.now())
     user = db.Column(String)
+
 
 # para guardar todas las ventas que se hagan
 class Sells(db.Model):
@@ -36,8 +38,10 @@ class Sells(db.Model):
     id = db.Column(Integer, primary_key=True, autoincrement=True)
 
     symbol = db.Column(String, nullable=False)
-    price = db.Column(Float)
+    unit_price = db.Column(Float)
     quantity = db.Column(Float)
+    commission = db.Column(Float)
+
 
     date = db.Column(DateTime, server_default=db.func.now())
     user = db.Column(String)
