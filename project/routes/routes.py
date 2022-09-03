@@ -86,7 +86,7 @@ def test_order():
         avg_price = float(n_client.get_avg_price(symbol=data['symbol'])['price'])
 
         # MIN_NOTIONAL
-        min_notional = float(symbol_info["filters"][3]["minNotional"]) + 20
+        min_notional = float(symbol_info["filters"][3]["minNotional"])
         quantity = min_notional / avg_price
 
         # ASSET_PRECISION
@@ -97,21 +97,26 @@ def test_order():
                 quantity = float(round(quantity,round_to))
         else:
             quantity = float(symbol_info["filters"][2]["minQty"])
-        
+
         # LOT_SIZE
         min_quantity_allowed = float(symbol_info["filters"][2]["minQty"])
         if quantity < min_quantity_allowed:
-            return jsonify({
+            error_dict = {
                 "error": "La cantidad es menor a la minima permitida del activo",
                 "filterType": symbol_info["filters"][2]["filterType"],
-                })
+            }
+            print(error_dict)
+            return jsonify(error_dict)
         
         # MARKET_LOT_SIZE
         market_min_quantity_allowed = float(symbol_info['filters'][5]['minQty'])
         if quantity < market_min_quantity_allowed:
-            return jsonify({"error": "La cantidad es menor a la minima permitida del activo",
+            error_dict = {
+                "error": "La cantidad es menor a la minima permitida del activo",
                 "filterType": symbol_info["filters"][5]["filterType"],
-                })
+            }
+            print(error_dict)
+            return jsonify(error_dict)
 
         params = {
             'symbol': data['symbol'],
@@ -122,6 +127,7 @@ def test_order():
 
         response = dict() 
         
+        #import ipdb; ipdb.set_trace()
 
 
         # N BUY
@@ -139,25 +145,27 @@ def test_order():
         else:
             try:
                 n_order = n_client.create_test_order(**params)
+                
+                # fill up price
+                n_price = 0
+                for fill in n_order['fills']:
+                    fill_price = float(fill['price']) * float(fill['qty'])
+                    n_price += fill_price
 
+                    buy = Buys(
+                        symbol = data['symbol'][:-4],
+                        unit_price = float(fill['price']),
+                        quantity = float(fill['qty']),
+                        commission = float(fill['commission']),
+                        user = "N"
+                    )
 
-                # SOLO PARA TESTING
-                if len(n_order) == 0:
-                    n_order['price'] = 1
-
-
-
-                n_last_operation.price = n_order['price'] 
+                n_last_operation.price = n_price 
                 n_last_operation.quantity = quantity
                 n_last_operation.last_operation = "B"
                 db.session.add(n_last_operation)
                 
-                buy = Buys(
-                    symbol= data['symbol'][:-4],
-                    price= n_order['price'],
-                    quantity= quantity,
-                    user = "N"
-                )
+
                 db.session.add(buy)
                 print("N order placed.")
                 response["N_order"] = n_order
@@ -191,24 +199,26 @@ def test_order():
             try:
                 f_order = f_client.create_test_order(**params)
 
+                # fill up price
+                f_price = 0
+                for fill in f_order['fills']:
+                    fill_price = float(fill['price']) * float(fill['qty'])
+                    f_price += fill_price
 
-                # SOLO PARA TESTING
-                if len(f_order) == 0:
-                    f_order['price'] = 1
+                    buy = Buys(
+                        symbol = data['symbol'][:-4],
+                        unit_price = float(fill['price']),
+                        quantity = float(fill['qty']),
+                        commission = float(fill['commission']),
+                        user = "F"
+                    )
 
-
-
-                f_last_operation.price = f_order['price'] 
+                f_last_operation.price = f_price 
                 f_last_operation.quantity = quantity
                 f_last_operation.last_operation = "B"
                 db.session.add(f_last_operation)
                 
-                buy = Buys(
-                    symbol= data['symbol'][:-4],
-                    price= f_order['price'], 
-                    quantity= quantity,
-                    user = "F"
-                )
+
                 db.session.add(buy)
                 print("F order placed.")
 
@@ -226,6 +236,8 @@ def test_order():
                 print("Client F session closed.")
 
         db.session.commit() 
+        
+        print(response)
         return jsonify(response)    
 
 
@@ -237,26 +249,16 @@ def test_order():
         response = dict()
         
 
-
         # N SELL
         n_last_operation = LastOperation.query.filter_by(symbol=data['symbol'][:-4], user="N").first()
         if n_last_operation.last_operation == "S":
             response["N_error"] = {"error": "No se permite vender, la ultima operacion con esta moneda fue una venta."}
         else:
-            n_asset_amount = int(float(n_client.get_asset_balance(asset)['free']))
+            n_asset_amount = float(n_client.get_asset_balance(asset)['free'])
             n_last_buy_price = n_last_operation.price
 
             if float(n_last_buy_price) > float(asset_actual_market_price):
                 response["N_error"] = {"error": "Se esta intentando vender a menos de lo que se gasto al comprar"}
-
-            
-            
-            # SOLO PARA TESTING
-            if n_asset_amount == 0:
-                n_asset_amount = 10
-
-
-
 
             n_params = {
                 'symbol': data['symbol'],
@@ -269,25 +271,25 @@ def test_order():
         
             try:
                 n_order = n_client.create_test_order(**n_params)
-                
 
-
-                # SOLO PARA TESTING
-                if len(n_order) == 0:
-                    n_order['price'] = 10
-
-
-
-                n_sell = Sells(
-                    symbol=data['symbol'][:-4],
-                    price=n_order['price'],
-                    quantity=n_asset_amount,
-                    user = "N"
-                    )
-                db.session.add(n_sell)
+                # fill up price
+                n_price = 0
+                for fill in n_order['fills']:
+                    fill_price = float(fill['price']) * float(fill['qty'])
+                    
+                    n_price += fill_price
+                    
+                    n_sell = Sells(
+                        symbol = data['symbol'][:-4],
+                        unit_price = float(fill['price']),
+                        quantity = float(fill['qty']),
+                        commission = float(fill['commission']),
+                        user = "N"
+                        )
+                    db.session.add(n_sell)
 
                 n_last_operation.last_operation = "S"
-                n_last_operation.price = n_order['price']
+                n_last_operation.price = n_price
                 n_last_operation.quantity = n_asset_amount
                 db.session.add(n_last_operation)
 
@@ -315,17 +317,11 @@ def test_order():
         if f_last_operation.last_operation == "S":
             response["F_error"] = {"error": "No se permite vender, la ultima operacion con esta moneda fue una venta."}
         else:
-            f_asset_amount = int(float(n_client.get_asset_balance(asset)['free']))
-            f_last_buy_price = n_last_operation.price
+            f_asset_amount = float(f_client.get_asset_balance(asset)['free'])
+            f_last_buy_price = f_last_operation.price
 
             if float(f_last_buy_price) > float(asset_actual_market_price):
                 response["F_error"] = {"error": "Se esta intentando vender a menos de lo que se gasto al comprar"}
-
-
-            # SOLO PARA TESTING
-            if f_asset_amount == 0:
-                f_asset_amount = 10
-
 
             f_params = {
                 'symbol': data['symbol'],
@@ -336,27 +332,29 @@ def test_order():
                 #'price': data['price'],
                 }
         
+            #import ipdb; ipdb.set_trace()
+            
             try:
                 f_order = f_client.create_test_order(**f_params)
+
+                # fill up price
+                f_price = 0
+                for fill in f_order['fills']:
+                    fill_price = float(fill['price']) * float(fill['qty'])
+                    f_price += fill_price
+
                 
-
-
-                # SOLO PARA TESTING
-                if len(f_order) == 0:
-                    f_order['price'] = 10
-
-
-
-                f_sell = Sells(
-                    symbol=data['symbol'][:-4],
-                    price=f_order['price'], 
-                    quantity=f_asset_amount,
-                    user = "F"
-                    )
-                db.session.add(f_sell)
+                    f_sell = Sells(
+                        symbol=data['symbol'][:-4],
+                        unit_price = float(fill['price']),
+                        quantity = float(fill['qty']),
+                        commission = float(fill['commission']),
+                        user = "F"
+                        )
+                    db.session.add(f_sell)
 
                 f_last_operation.last_operation = "S"
-                f_last_operation.price = f_order['price']
+                f_last_operation.price = f_price
                 f_last_operation.quantity = f_asset_amount
                 db.session.add(f_last_operation)
 
@@ -377,11 +375,16 @@ def test_order():
                 print("Client F session closed.")
                 
         db.session.commit() 
+        
+        print(response)
         return jsonify(response)    
 
     
     else:
-        return jsonify({"error": "Side can only be BUY/SELL"})
+        error_dict = {"error": "Side can only be BUY/SELL"}
+        print(error_dict)
+        return jsonify(error_dict)
+
 
 
 
@@ -404,7 +407,7 @@ def make_order():
         avg_price = float(n_client.get_avg_price(symbol=data['symbol'])['price'])
 
         # MIN_NOTIONAL
-        min_notional = float(symbol_info["filters"][3]["minNotional"]) + 20
+        min_notional = float(symbol_info["filters"][3]["minNotional"])
         quantity = min_notional / avg_price
 
         # ASSET_PRECISION
