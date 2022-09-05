@@ -25,37 +25,6 @@ N_API_SECRET = config('N_API_SECRET')  #os.getenv('API_SECRET')
 USDT_BUY_AMOUNT = int(config('USDT_BUY_AMOUNT')) #os.getenv('USDT_BUY_AMOUNT')
 
 
-
-
-"""
---- LOGICA DE NEGOCIO ---
-
-Levantar una sqlite3 para:
-
-- Registrar precio y cantidad de ultima compras de cada moneda
-- Registrar todas las compras
-- Registrar todas las ventas
-
-Confirmar que lo gastado al comprar sea menor que lo ganado al vender, nunca se venderia 
-a menos que estes ganando $. Osea comparando el precio unitario de la ultima compra y asegurandose
-de estar vendiendo a mas.
-
-Preguntas:
-Esto no puede trabar operaciones si la moneda sufre una gran baja de valor?
-Guardar registro de las operaciones fallidas?
-
-symbols = [
-    BTC, 
-    WAVES, 
-    BNB, 
-    AVAX, 
-    DOT, 
-    MOVR, 
-    SOL, 
-    KSM
-]
-"""
-
 """
 --- ENDPOINTS UTILES DE PYTHON BINANCE ---
 
@@ -86,7 +55,7 @@ def test_order():
         avg_price = float(n_client.get_avg_price(symbol=data['symbol'])['price'])
 
         # MIN_NOTIONAL
-        min_notional = float(symbol_info["filters"][3]["minNotional"])
+        min_notional = float(symbol_info["filters"][3]["minNotional"]) + 1
         quantity = min_notional / avg_price
 
         # ASSET_PRECISION
@@ -248,7 +217,6 @@ def test_order():
         
         response = dict()
         
-
         # N SELL
         n_last_operation = LastOperation.query.filter_by(symbol=data['symbol'][:-4], user="N").first()
         if n_last_operation.last_operation == "S":
@@ -257,7 +225,18 @@ def test_order():
             n_asset_amount = float(n_client.get_asset_balance(asset)['free'])
             n_last_buy_price = n_last_operation.price
 
-            if float(n_last_buy_price) > float(asset_actual_market_price):
+
+
+            # COMMISSION
+            commission = (n_asset_amount / 100) * 0.0750 
+            # esta en BNB? multiplicar por valor actual de BNB,
+            # pasaria a dolares. y ahi multiplicar esos dolares por el valor de la moneda 
+            # que se esta tradeando
+            price_and_commission = float(asset_actual_market_price) + commission
+
+
+
+            if float(n_last_buy_price) > price_and_commission:
                 response["N_error"] = {"error": "Se esta intentando vender a menos de lo que se gasto al comprar"}
 
             n_params = {
@@ -407,7 +386,7 @@ def make_order():
         avg_price = float(n_client.get_avg_price(symbol=data['symbol'])['price'])
 
         # MIN_NOTIONAL
-        min_notional = float(symbol_info["filters"][3]["minNotional"])
+        min_notional = float(symbol_info["filters"][3]["minNotional"]) + 1
         quantity = min_notional / avg_price
 
         # ASSET_PRECISION
@@ -537,7 +516,6 @@ def make_order():
                 f_last_operation.quantity = quantity
                 f_last_operation.last_operation = "B"
                 db.session.add(f_last_operation)
-                
 
                 db.session.add(buy)
                 print("F order placed.")
