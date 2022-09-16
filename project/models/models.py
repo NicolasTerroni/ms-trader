@@ -4,7 +4,7 @@ from sqlalchemy import Integer, String, DateTime, Float
 from project.models.init_db import db
 
 
-# para guardar las ultimas compras de cada moneda
+
 class LastOperation(db.Model):
     __tablename__ = 'last_operation'
     id = db.Column(Integer, primary_key=True, autoincrement=True)
@@ -18,7 +18,7 @@ class LastOperation(db.Model):
     user = db.Column(String)
 
 
-# para guardar todas las compras que se hagan
+
 class Buys(db.Model):
     __tablename__ = 'buys'
     id = db.Column(Integer, primary_key=True, autoincrement=True)
@@ -32,7 +32,7 @@ class Buys(db.Model):
     user = db.Column(String)
 
 
-# para guardar todas las ventas que se hagan
+
 class Sells(db.Model):
     __tablename__ = 'sells'
     id = db.Column(Integer, primary_key=True, autoincrement=True)
@@ -42,7 +42,15 @@ class Sells(db.Model):
     quantity = db.Column(Float)
     commission = db.Column(Float)
 
-
     date = db.Column(DateTime, server_default=db.func.now())
     user = db.Column(String)
 
+
+# when selling, we register earnings in the database
+class Earns(db.Model):
+    id = db.Column(Integer, primary_key=True, autoincrement=True)
+    symbol = db.Column(String, nullable=False)
+    earns = db.Column(Float)
+    
+    date = db.Column(DateTime, server_default=db.func.now())
+    user = db.Column(String)

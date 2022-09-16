@@ -1,16 +1,16 @@
-import logging
-from time import sleep
+#import logging
+#from time import sleep
 from flask import Blueprint, request
 from flask.json import jsonify
-import os, json
+#import os, json
 
 from project.models.init_db import db
-from project.models.models import Buys, LastOperation, Sells
+from project.models.models import Buys, LastOperation, Sells, Earns
 
 from binance.client import Client
 from binance.enums import *
-from binance.exceptions import BinanceAPIException, BinanceOrderException
-from datetime import datetime, timedelta
+# from binance.exceptions import BinanceAPIException, BinanceOrderException
+from datetime import datetime #, timedelta
 from decouple import config
 
 
@@ -35,9 +35,10 @@ prices = client.get_all_tickers()
 orders = client.get_all_orders(symbol='BNBBTC', limit=10)
 
 # get open orders
-orders = client.get_open_orders(symbol='RVNUSDT')        
-
+orders = client.get_open_orders(symbol='RVNUSDT')
 """
+
+
 
 # TEST ORDER
 @trader_api.route('/test_order', methods=['POST'])
@@ -607,15 +608,25 @@ def make_order():
                             )
                         db.session.add(n_sell)
 
+
                     n_last_operation.last_operation = "S"
                     n_last_operation.price = n_price
                     n_last_operation.quantity = n_asset_amount
                     n_last_operation.date = datetime.now()
 
                     db.session.add(n_last_operation)
-
                     db.session.commit()
                     
+
+                    # register earnings
+                    earning = Earns(
+                        symbol = data['symbol'][:-4],
+                        earns = n_price - n_last_buy_price,
+                        user = "N",
+                    )
+                    db.session.add(earning)
+                    db.session.commit()
+
                     response['N_order'] = n_order
 
                 except Exception as e: 
@@ -696,8 +707,17 @@ def make_order():
                     f_last_operation.quantity = f_asset_amount
                     f_last_operation.date = datetime.now()
                     db.session.add(f_last_operation)
-
                     db.session.commit()
+
+                    # register earnings
+                    earning = Earns(
+                        symbol = data['symbol'][:-4],
+                        earns = f_price - f_last_buy_price,
+                        user = "F",
+                    )
+                    db.session.add(earning)                    
+                    db.session.commit()
+
                     response['F_order'] = f_order
 
 
