@@ -16,11 +16,13 @@ from decouple import config
 
 trader_api = Blueprint('users',__name__)
 
-# obtener de variables de entorno 
 F_API_KEY = config('F_API_KEY') #os.getenv('API_KEY')
 F_API_SECRET = config('F_API_SECRET')  #os.getenv('API_SECRET')
+F_USDT_OPERATION_PRICE = config('F_USDT_OPERATION_PRICE')  #os.getenv('F_USDT_OPERATION_PRICE')
+
 N_API_KEY = config('N_API_KEY') #os.getenv('API_KEY')
 N_API_SECRET = config('N_API_SECRET')  #os.getenv('API_SECRET')
+N_USDT_OPERATION_PRICE = config('N_USDT_OPERATION_PRICE')  #os.getenv('N_USDT_OPERATION_PRICE')
 
 USDT_BUY_AMOUNT = int(config('USDT_BUY_AMOUNT')) #os.getenv('USDT_BUY_AMOUNT')
 
@@ -422,13 +424,29 @@ def make_order():
         params = {
             'symbol': data['symbol'],
             'side': 'BUY',
-            'type': 'MARKET', # Siempre MARKET?
+            'type': 'MARKET',
             'quantity': float(quantity),
         }
 
         response = dict() 
         
 
+
+        # N new peration price
+        
+        if N_USDT_OPERATION_PRICE > min_notional:
+            quantity = float(N_USDT_OPERATION_PRICE / avg_price)
+
+            # ASSET_PRECISION
+            if int(symbol_info["filters"][2]["minQty"].split(".")[0]) == 0:
+                decimals = symbol_info["filters"][2]["minQty"].split(".")[1]
+                round_to = decimals.find("1") + 1
+                if len(str(quantity).split(".")[1]) > symbol_info['baseAssetPrecision']:
+                    quantity = float(round(quantity,round_to))
+            else:
+                quantity = float(symbol_info["filters"][2]["minQty"])
+
+            params['quantity'] = float(quantity)
 
         # N BUY
         n_last_operation = LastOperation.query.filter_by(symbol=data['symbol'][:-4], user="N").first()
@@ -482,6 +500,24 @@ def make_order():
                 n_client.close_connection()
                 print("Client N session closed.")
         
+
+        
+
+        # F new peration price
+        
+        if F_USDT_OPERATION_PRICE > min_notional:
+            quantity = float(F_USDT_OPERATION_PRICE / avg_price)
+
+            # ASSET_PRECISION
+            if int(symbol_info["filters"][2]["minQty"].split(".")[0]) == 0:
+                decimals = symbol_info["filters"][2]["minQty"].split(".")[1]
+                round_to = decimals.find("1") + 1
+                if len(str(quantity).split(".")[1]) > symbol_info['baseAssetPrecision']:
+                    quantity = float(round(quantity,round_to))
+            else:
+                quantity = float(symbol_info["filters"][2]["minQty"])
+
+            params['quantity'] = float(quantity)
 
 
         # F BUY
